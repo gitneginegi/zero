@@ -1,1 +1,71 @@
-<html>てすてす</html>
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>Camera OCR Sample</title>
+
+  <!-- Tesseract.js -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+    }
+    img {
+      max-width: 100%;
+      margin-top: 10px;
+    }
+    #result {
+      white-space: pre-wrap;
+      margin-top: 15px;
+      padding: 10px;
+      border: 1px solid #ccc;
+    }
+  </style>
+</head>
+<body>
+
+<h2>📷 カメラOCRテスト</h2>
+
+<!-- カメラ起動 -->
+<input
+  type="file"
+  accept="image/*"
+  capture="environment"
+  id="cameraInput"
+/>
+
+<img id="preview" />
+<div id="result">ここに読み取った文字が出ます</div>
+
+<script>
+  const input = document.getElementById("cameraInput");
+  const preview = document.getElementById("preview");
+  const result = document.getElementById("result");
+
+  input.addEventListener("change", async () => {
+    const file = input.files[0];
+    if (!file) return;
+
+    // 撮影画像を表示
+    const imageURL = URL.createObjectURL(file);
+    preview.src = imageURL;
+
+    result.textContent = "⏳ OCR中… 少し待ってね";
+
+    // OCR実行
+    const { data } = await Tesseract.recognize(
+      file,
+      "eng", // 日本語なら "jpn"（※重い）
+      {
+        logger: m => console.log(m)
+      }
+    );
+
+    result.textContent = data.text;
+  });
+</script>
+
+</body>
+</html>
