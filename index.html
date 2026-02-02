@@ -36,12 +36,15 @@
       border: 1px solid #ccc;
     }
 
+    /* ★ 結果を大きく・目立たせる */
     #result {
-      margin-top: 15px;
-      padding: 12px;
-      border: 1px solid #ccc;
-      background: #f9f9f9;
-      font-size: 18px;
+      margin-top: 20px;
+      padding: 16px;
+      border: 2px solid #007aff;
+      background: #f0f6ff;
+      font-size: 24px;
+      font-weight: bold;
+      text-align: center;
     }
   </style>
 </head>
@@ -49,7 +52,6 @@
 
 <h2>📷 7桁番号 読み取り（中央トリミング）</h2>
 
-<!-- 大きなボタン -->
 <label for="cameraInput" class="camera-button">
   カメラを起動する
 </label>
@@ -61,12 +63,11 @@
   id="cameraInput"
 />
 
-<!-- ★ メッセージを画像より上に配置 -->
+<!-- 結果を画像より上に -->
 <div id="result">ここに結果が表示されます</div>
 
 <p>※ 数字が画面中央に来るように撮影してください</p>
 
-<!-- 画像は下に表示 -->
 <img id="preview" />
 <img id="croppedPreview" />
 
