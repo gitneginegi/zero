@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <title>7桁番号OCR（中央トリミング）</title>
-
+<script>
+  const employeeData = [];
+</script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
   <style>
@@ -133,11 +135,21 @@
         const numbersOnly = data.text.replace(/\D/g, "");
         const match = numbersOnly.match(/\d{7}/);
 
-        if (match) {
-          result.textContent = `✅ 見つかりました：${match[0]}`;
-        } else {
-          result.textContent = "❌ 7桁の数字が見つかりませんでした。";
-        }
+       if (match) {
+  const code = match[0];  // OCRで読み取った7桁
+
+  // ★ ここで employeeData と照合する
+  const hit = employeeData.find(e => e.id === code);
+
+  if (hit) {
+    result.textContent = `✅ ${code} / ${hit.name} / ${hit.renban}`;
+  } else {
+    result.textContent = `❌ ${code} は登録されていません`;
+  }
+
+} else {
+  result.textContent = "❌ 7桁の数字が見つかりませんでした。";
+}
 
       } catch (e) {
         result.textContent = "❌ OCRエラーが発生しました";
