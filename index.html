@@ -40,6 +40,7 @@
       margin-top: 15px;
       padding: 12px;
       border: 1px solid #ccc;
+      background: #f9f9f9;
       font-size: 18px;
     }
   </style>
@@ -60,12 +61,14 @@
   id="cameraInput"
 />
 
+<!-- ★ メッセージを画像より上に配置 -->
+<div id="result">ここに結果が表示されます</div>
+
 <p>※ 数字が画面中央に来るように撮影してください</p>
 
+<!-- 画像は下に表示 -->
 <img id="preview" />
 <img id="croppedPreview" />
-
-<div id="result">ここに結果が表示されます</div>
 
 <script>
   const input = document.getElementById("cameraInput");
