@@ -2,33 +2,43 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>Camera OCR Sample</title>
+  <title>7桁番号OCR</title>
 
   <!-- Tesseract.js -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
   <style>
     body {
-      font-family: sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
       padding: 20px;
     }
+
+    h2 {
+      margin-bottom: 10px;
+    }
+
+    input {
+      font-size: 16px;
+      margin-bottom: 10px;
+    }
+
     img {
       max-width: 100%;
       margin-top: 10px;
     }
+
     #result {
-      white-space: pre-wrap;
       margin-top: 15px;
-      padding: 10px;
+      padding: 12px;
       border: 1px solid #ccc;
+      font-size: 18px;
     }
   </style>
 </head>
 <body>
 
-<h2>📷 カメラOCRテスト</h2>
+<h2>📷 7桁番号 読み取り</h2>
 
-<!-- カメラ起動 -->
 <input
   type="file"
   accept="image/*"
@@ -37,7 +47,8 @@
 />
 
 <img id="preview" />
-<div id="result">ここに読み取った文字が出ます</div>
+
+<div id="result">ここに結果が表示されます</div>
 
 <script>
   const input = document.getElementById("cameraInput");
@@ -48,22 +59,34 @@
     const file = input.files[0];
     if (!file) return;
 
-    // 撮影画像を表示
+    // 撮影画像プレビュー
     const imageURL = URL.createObjectURL(file);
     preview.src = imageURL;
 
-    result.textContent = "⏳ OCR中… 少し待ってね";
+    result.textContent = "⏳ 読み取り中…";
 
-    // OCR実行
-    const { data } = await Tesseract.recognize(
-      file,
-      "eng", // 日本語なら "jpn"（※重い）
-      {
-        logger: m => console.log(m)
+    try {
+      const { data } = await Tesseract.recognize(
+        file,
+        "eng", // 数字だけなら eng が最速・最安定
+        {
+          logger: m => console.log(m)
+        }
+      );
+
+      // OCR結果から7桁の数字を探す
+      const match = data.text.match(/\b\d{7}\b/);
+
+      if (match) {
+        result.textContent = `✅ 見つかりました：${match[0]}`;
+      } else {
+        result.textContent = "❌ 見つからなかった。";
       }
-    );
 
-    result.textContent = data.text;
+    } catch (e) {
+      result.textContent = "❌ エラーが発生しました";
+      console.error(e);
+    }
   });
 </script>
 
