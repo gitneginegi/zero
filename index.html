@@ -570,6 +570,13 @@
       font-weight: bold;
       text-align: center;
     }
+
+    #debugInfo {
+      margin-top: 10px;
+      font-size: 13px;
+      color: #666;
+      white-space: pre-wrap;
+    }
   </style>
 </head>
 <body>
@@ -589,6 +596,7 @@
 
 <!-- 結果を画像より上に -->
 <div id="result">ここに結果が表示されます</div>
+<div id="debugInfo"></div>
 
 <p>※ 数字が画面中央に来るように撮影してください</p>
 
@@ -600,6 +608,41 @@
   const preview = document.getElementById("preview");
   const croppedPreview = document.getElementById("croppedPreview");
   const result = document.getElementById("result");
+  const debugInfo = document.getElementById("debugInfo");
+
+  // ===== 画像前処理: グレースケール化 + 二値化（コントラストをはっきりさせる） =====
+  function binarize(ctx, width, height, thresholdOffset = 0.85) {
+    const imgData = ctx.getImageData(0, 0, width, height);
+    const data = imgData.data;
+
+    // まずグレースケール化して平均輝度を求める（適応的しきい値のため）
+    let sum = 0;
+    const grays = new Uint8ClampedArray(width * height);
+    for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+      const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      grays[p] = gray;
+      sum += gray;
+    }
+    const avg = sum / grays.length;
+    const threshold = avg * thresholdOffset;
+
+    for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+      const v = grays[p] < threshold ? 0 : 255;
+      data[i] = data[i + 1] = data[i + 2] = v;
+    }
+    ctx.putImageData(imgData, 0, 0);
+  }
+
+  // ===== 指定したpsmモードでOCRを実行 =====
+  async function runOCR(dataUrl, psm) {
+    const { data } = await Tesseract.recognize(dataUrl, "eng", {
+      tessedit_char_whitelist: "0123456789",
+      tessedit_pageseg_mode: psm
+    });
+    const numbersOnly = data.text.replace(/\D/g, "");
+    const match = numbersOnly.match(/\d{7}/);
+    return { match: match ? match[0] : null, confidence: data.confidence, raw: data.text };
+  }
 
   input.addEventListener("change", () => {
     const file = input.files[0];
@@ -610,6 +653,7 @@
 
     preview.src = img.src;
     result.textContent = "⏳ 読み取り中…";
+    debugInfo.textContent = "";
 
     img.onload = async () => {
       // ===== 中央トリミング設定 =====
@@ -640,39 +684,52 @@
         cropHeight
       );
 
-      const croppedDataUrl = canvas.toDataURL("image/png");
-      croppedPreview.src = croppedDataUrl;
+      // ===== 拡大（アップスケール）してOCR精度を上げる =====
+      const scale = 3;
+      const upCanvas = document.createElement("canvas");
+      upCanvas.width = cropWidth * scale;
+      upCanvas.height = cropHeight * scale;
+      const upCtx = upCanvas.getContext("2d");
+      upCtx.imageSmoothingEnabled = true;
+      upCtx.imageSmoothingQuality = "high";
+      upCtx.drawImage(canvas, 0, 0, upCanvas.width, upCanvas.height);
+
+      // ===== グレースケール化＋二値化 =====
+      binarize(upCtx, upCanvas.width, upCanvas.height);
+
+      const processedDataUrl = upCanvas.toDataURL("image/png");
+      croppedPreview.src = processedDataUrl;
 
       try {
-        const { data } = await Tesseract.recognize(
-          croppedDataUrl,
-          "eng",
-          {
-            logger: m => console.log(m),
-            tessedit_char_whitelist: "0123456789",
-tessedit_pageseg_mode: 7
+        // まず単一行モードで試す。ダメなら別モードで再試行。
+        const psmModes = [7, 6, 8];
+        let best = null;
+
+        for (const psm of psmModes) {
+          const attempt = await runOCR(processedDataUrl, psm);
+          if (attempt.match) {
+            best = attempt;
+            break;
           }
-        );
+          if (!best || (attempt.confidence ?? 0) > (best.confidence ?? 0)) {
+            best = attempt;
+          }
+        }
 
-        // 数字以外を除去して7桁チェック
-        const numbersOnly = data.text.replace(/\D/g, "");
-        const match = numbersOnly.match(/\d{7}/);
+        debugInfo.textContent = `(認識文字列: "${best.raw.trim()}" / 信頼度: ${Math.round(best.confidence || 0)}%)`;
 
-       if (match) {
-  const code = match[0];  // OCRで読み取った7桁
+        if (best.match) {
+          const code = best.match;
+          const hit = employeeData.find(e => e.id === code);
 
-  // ★ ここで employeeData と照合する
-  const hit = employeeData.find(e => e.id === code);
-
-  if (hit) {
-    result.textContent = `✅ ${code} / ${hit.name} / ${hit.renban}`;
-  } else {
-    result.textContent = `❌ ${code} は登録されていません`;
-  }
-
-} else {
-  result.textContent = "❌ 7桁の数字が見つかりませんでした。";
-}
+          if (hit) {
+            result.textContent = `✅ ${code} / ${hit.name} / ${hit.renban}`;
+          } else {
+            result.textContent = `❌ ${code} は登録されていません`;
+          }
+        } else {
+          result.textContent = "❌ 7桁の数字が見つかりませんでした。";
+        }
 
       } catch (e) {
         result.textContent = "❌ OCRエラーが発生しました";
