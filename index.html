@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -577,6 +578,21 @@
       color: #666;
       white-space: pre-wrap;
     }
+
+    /* 読み取り範囲を示す枠のためのラッパー */
+    .preview-wrapper {
+      position: relative;
+      display: inline-block;
+      max-width: 100%;
+    }
+
+    #cropOverlay {
+      position: absolute;
+      border: 3px solid #ff3b30;
+      box-sizing: border-box;
+      pointer-events: none;
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -600,7 +616,10 @@
 
 <p>※ 数字が画面中央に来るように撮影してください</p>
 
-<img id="preview" />
+<div class="preview-wrapper">
+  <img id="preview" />
+  <div id="cropOverlay"></div>
+</div>
 <img id="croppedPreview" />
 
 <script>
@@ -609,6 +628,20 @@
   const croppedPreview = document.getElementById("croppedPreview");
   const result = document.getElementById("result");
   const debugInfo = document.getElementById("debugInfo");
+  const cropOverlay = document.getElementById("cropOverlay");
+
+  // ===== 中央トリミング設定（枠表示とトリミング処理の両方でこの値を使う） =====
+  const cropWidthRatio = 0.6;   // 横60%
+  const cropHeightRatio = 0.25; // 縦25%
+
+  // 信頼度がこれ未満の場合は結果を採用しない（誤読と判断）
+  const CONFIDENCE_THRESHOLD = 55;
+
+  // 枠の位置・サイズを設定（画像の表示サイズに対する%指定なので、常に正しい位置に出る）
+  cropOverlay.style.left = ((1 - cropWidthRatio) / 2 * 100) + "%";
+  cropOverlay.style.top = ((1 - cropHeightRatio) / 2 * 100) + "%";
+  cropOverlay.style.width = (cropWidthRatio * 100) + "%";
+  cropOverlay.style.height = (cropHeightRatio * 100) + "%";
 
   // ===== 画像前処理: グレースケール化 + 二値化（コントラストをはっきりさせる） =====
   function binarize(ctx, width, height, thresholdOffset = 0.85) {
@@ -641,7 +674,7 @@
     });
     const numbersOnly = data.text.replace(/\D/g, "");
     const match = numbersOnly.match(/\d{7}/);
-    return { match: match ? match[0] : null, confidence: data.confidence, raw: data.text };
+    return { match: match ? match[0] : null, confidence: data.confidence || 0, raw: data.text };
   }
 
   input.addEventListener("change", () => {
@@ -652,14 +685,11 @@
     img.src = URL.createObjectURL(file);
 
     preview.src = img.src;
+    cropOverlay.style.display = "block";
     result.textContent = "⏳ 読み取り中…";
     debugInfo.textContent = "";
 
     img.onload = async () => {
-      // ===== 中央トリミング設定 =====
-      const cropWidthRatio = 0.6;   // 横60%
-      const cropHeightRatio = 0.25; // 縦25%
-
       const cropWidth = img.width * cropWidthRatio;
       const cropHeight = img.height * cropHeightRatio;
 
@@ -701,24 +731,22 @@
       croppedPreview.src = processedDataUrl;
 
       try {
-        // まず単一行モードで試す。ダメなら別モードで再試行。
+        // 複数モードすべて試して、一番信頼度が高い結果を採用する
         const psmModes = [7, 6, 8];
-        let best = null;
-
+        const attempts = [];
         for (const psm of psmModes) {
-          const attempt = await runOCR(processedDataUrl, psm);
-          if (attempt.match) {
-            best = attempt;
-            break;
-          }
-          if (!best || (attempt.confidence ?? 0) > (best.confidence ?? 0)) {
-            best = attempt;
-          }
+          attempts.push(await runOCR(processedDataUrl, psm));
         }
 
-        debugInfo.textContent = `(認識文字列: "${best.raw.trim()}" / 信頼度: ${Math.round(best.confidence || 0)}%)`;
+        // 7桁の数字が取れたものだけを対象に、信頼度が一番高いものを選ぶ
+        const validAttempts = attempts.filter(a => a.match);
+        const best = validAttempts.length
+          ? validAttempts.reduce((a, b) => (a.confidence >= b.confidence ? a : b))
+          : attempts.reduce((a, b) => (a.confidence >= b.confidence ? a : b));
 
-        if (best.match) {
+        debugInfo.textContent = `(認識文字列: "${best.raw.trim()}" / 信頼度: ${Math.round(best.confidence)}%)`;
+
+        if (best.match && best.confidence >= CONFIDENCE_THRESHOLD) {
           const code = best.match;
           const hit = employeeData.find(e => e.id === code);
 
@@ -727,8 +755,10 @@
           } else {
             result.textContent = `❌ ${code} は登録されていません`;
           }
+        } else if (best.match) {
+          result.textContent = `⚠️ 読み取り精度が低いです（候補: ${best.match}）。撮り直してください`;
         } else {
-          result.textContent = "❌ 7桁の数字が見つかりませんでした。";
+          result.textContent = "❌ 7桁の数字が見つかりませんでした。撮り直してください";
         }
 
       } catch (e) {
