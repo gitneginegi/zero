@@ -666,6 +666,42 @@
     ctx.putImageData(imgData, 0, 0);
   }
 
+  // ===== 二値化後の画像から「文字がある部分」だけの範囲を検出する =====
+  function findContentBBox(ctx, width, height) {
+    const imgData = ctx.getImageData(0, 0, width, height);
+    const data = imgData.data;
+    const rowCounts = new Array(height).fill(0);
+    const colCounts = new Array(width).fill(0);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = (y * width + x) * 4;
+        if (data[idx] < 128) { // 黒いピクセル＝インク
+          rowCounts[y]++;
+          colCounts[x]++;
+        }
+      }
+    }
+    // ノイズの1〜2ピクセルだけの行/列は無視する
+    const rowThreshold = Math.max(1, width * 0.01);
+    const colThreshold = Math.max(1, height * 0.01);
+
+    let minX = -1, maxX = -1, minY = -1, maxY = -1;
+    for (let y = 0; y < height; y++) {
+      if (rowCounts[y] > rowThreshold) {
+        if (minY === -1) minY = y;
+        maxY = y;
+      }
+    }
+    for (let x = 0; x < width; x++) {
+      if (colCounts[x] > colThreshold) {
+        if (minX === -1) minX = x;
+        maxX = x;
+      }
+    }
+    if (minX === -1 || minY === -1) return null;
+    return { minX, minY, maxX, maxY };
+  }
+
   // ===== 指定したpsmモードでOCRを実行 =====
   // 文字を無理やり数字に変換させないよう、whitelistで数字に限定しない。
   // その代わり、認識結果の中から「前後が数字でない、独立した7桁の数字」だけを拾う。
@@ -729,7 +765,26 @@
       // ===== グレースケール化＋二値化 =====
       binarize(upCtx, upCanvas.width, upCanvas.height);
 
-      const processedDataUrl = upCanvas.toDataURL("image/png");
+      // ===== 数字本体の範囲を自動検出して、その部分だけにさらにズームインする =====
+      let finalCanvas = upCanvas;
+      const bbox = findContentBBox(upCtx, upCanvas.width, upCanvas.height);
+      if (bbox) {
+        const padding = Math.round(upCanvas.height * 0.15); // 少し余白を残す
+        const x = Math.max(0, bbox.minX - padding);
+        const y = Math.max(0, bbox.minY - padding);
+        const w = Math.min(upCanvas.width, bbox.maxX + padding) - x;
+        const h = Math.min(upCanvas.height, bbox.maxY + padding) - y;
+
+        if (w > 0 && h > 0) {
+          const trimmed = document.createElement("canvas");
+          trimmed.width = w;
+          trimmed.height = h;
+          trimmed.getContext("2d").drawImage(upCanvas, x, y, w, h, 0, 0, w, h);
+          finalCanvas = trimmed;
+        }
+      }
+
+      const processedDataUrl = finalCanvas.toDataURL("image/png");
       croppedPreview.src = processedDataUrl;
 
       try {
