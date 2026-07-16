@@ -667,14 +667,16 @@
   }
 
   // ===== 指定したpsmモードでOCRを実行 =====
+  // 文字を無理やり数字に変換させないよう、whitelistで数字に限定しない。
+  // その代わり、認識結果の中から「前後が数字でない、独立した7桁の数字」だけを拾う。
   async function runOCR(dataUrl, psm) {
     const { data } = await Tesseract.recognize(dataUrl, "eng", {
-      tessedit_char_whitelist: "0123456789",
       tessedit_pageseg_mode: psm
     });
-    const numbersOnly = data.text.replace(/\D/g, "");
-    const match = numbersOnly.match(/\d{7}/);
-    return { match: match ? match[0] : null, confidence: data.confidence || 0, raw: data.text };
+    const raw = data.text;
+    // 前後が数字でない（8桁以上の一部ではない）独立した7桁だけを候補にする
+    const matches = raw.match(/(?<!\d)\d{7}(?!\d)/g);
+    return { match: matches && matches.length ? matches[0] : null, confidence: data.confidence || 0, raw };
   }
 
   input.addEventListener("change", () => {
